@@ -1,0 +1,53 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:18
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql/18/docker
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U userpg -d hpdb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: node:22
+    working_dir: /usr/src/app
+    volumes:
+      - ./:/usr/src/app:cached
+      - node_modules:/usr/src/app/node_modules
+    ports:
+      - "3000:3000"
+      - "9229:9229"
+    env_file:
+      - ./.env
+    command: sh -c "npm install --no-audit --no-fund && npx nodemon --legacy-watch --watch src --ext js,ts,json --inspect=0.0.0.0:9229 src/index.js"
+    depends_on:
+      - db
+      - redis
+
+volumes:
+  pgdata:
+  redisdata:
+  node_modules:
