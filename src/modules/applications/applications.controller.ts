@@ -37,7 +37,7 @@ export class ApplicationsController {
     type: CreateApplicationDto,
     description: 'Application data + CV file',
   })
-  async createApplication(
+  async create(
     @Body() dto: CreateApplicationDto,
     @UploadedFile() file: Express.Multer.File,
     @GetUser() user: JwtPayload,

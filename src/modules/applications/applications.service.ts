@@ -51,40 +51,65 @@ export class ApplicationsService {
       throw new BadRequestException('CV file is required');
     }
 
-    const jobPoster = await this.jobsRepository.findOne({
-      where: { id: dto.jobPosterId },
+    const application = await this.applicationsRepository.findOne({
+      where: {
+        candidate: { id: userId },
+        jobPoster: { id: dto.jobPosterId },
+      },
     });
+
+    if (application) {
+      this.logger.log('warn', {
+        message: 'failed applicataion, candidate already aplied to this job',
+      });
+      throw new ConflictException('You already applied to this job');
+    }
+
+    const [jobPoster, fullUser] = await Promise.all([
+      this.jobsRepository.findOne({ where: { id: dto.jobPosterId } }),
+      this.usersRepository.findOne({ where: { id: userId } }),
+    ]);
+
     if (!jobPoster) {
       throw new BadRequestException(
         `jobPoster with ${dto.jobPosterId} not found`,
       );
     }
 
-    this.logger.log('info', {
-      message: 'candidate applying',
-      userId,
-      dto,
-    });
-
-    const fullUser = await this.usersRepository.findOne({
-      where: { id: userId },
-    });
     if (!fullUser) {
       throw new NotFoundException('User not found');
     }
 
     const cvFilePath = await this.uploadCvFile(file, fullUser.id);
 
-    const dataApplication = {
-      jobPoster,
-      candidate: fullUser,
-      cvFilePath,
-      status: StatusApplication.PENDING,
-    };
-    const application = this.applicationsRepository.create(dataApplication);
+    const savedApplication = await this.dataSource.manager.transaction(
+      async (transactionalEntityManager) => {
+        const dataApplication = {
+          jobPoster,
+          candidate: fullUser,
+          cvFilePath,
+          status: StatusApplication.PENDING,
+        };
 
-    const savedApplication =
-      await this.applicationsRepository.save(application);
+        const application = transactionalEntityManager.create(
+          Application,
+          dataApplication,
+        );
+        const saved = await transactionalEntityManager.save(application);
+
+        await this.auditService.record({
+          userId,
+          entity: 'Application',
+          entityId: saved.id,
+          action: AuditAction.CREATE,
+          oldValues: null,
+          newValues: dataApplication,
+          ipAddress: ip,
+        });
+
+        return saved;
+      },
+    );
 
     this.logger.log('info', {
       message: 'candidate successfully applied',
@@ -93,17 +118,6 @@ export class ApplicationsService {
       status: savedApplication.status,
     });
 
-    await this.auditService.record({
-      userId,
-      entity: 'Application',
-      entityId: application.id,
-      action: AuditAction.UPDATE,
-      oldValues: null,
-      newValues: dataApplication,
-      ipAddress: ip,
-    });
-
-    // Queue background job
     this.applicationsQueue.add('processApplication', {
       applicationId: savedApplication.id,
       jobPosterId: jobPoster.id,
