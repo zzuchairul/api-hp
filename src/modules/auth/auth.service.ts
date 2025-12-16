@@ -6,12 +6,12 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { plainToInstance } from 'class-transformer';
-import { PublicUserDto } from '../users/dto/public-user.dto.js';
-import { UsersRepository } from '../users/users.repository.js';
-import { LoginResponseDTO } from './dto/login-response.dto.js';
-import { LoginUserDTO } from './dto/login-user.dto.js';
-import { RegisterUserDTO } from './dto/register-user.dto.js';
-import { JwtPayload } from './types/jwt-payload.interface.js';
+import { PublicUserDto } from '../users/dto/public-user.dto';
+import { UsersRepository } from '../users/users.repository';
+import { LoginResponseDTO } from './dto/login-response.dto';
+import { LoginUserDTO } from './dto/login-user.dto';
+import { RegisterUserDTO } from './dto/register-user.dto';
+import { JwtPayload } from './types/jwt-payload.interface';
 
 @Injectable()
 export class AuthService {

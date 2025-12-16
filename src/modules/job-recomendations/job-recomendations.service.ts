@@ -5,7 +5,6 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { firstValueFrom } from 'rxjs';
 import { catchError, timeout } from 'rxjs/operators';
@@ -22,7 +21,6 @@ export class JobRecomendationService {
 
   constructor(
     private readonly httpService: HttpService,
-    private readonly configService: ConfigService,
     @InjectRepository(Application)
     private readonly applicationRepository: Repository<Application>,
     private readonly redisCache: RedisCacheService,
@@ -41,18 +39,23 @@ export class JobRecomendationService {
     const cachedJobs =
       await this.redisCache.get<Partial<JobRecomendation>[]>(cacheKey);
 
-    let allJobs: Partial<JobRecomendation>[];
+    let jobs: Partial<JobRecomendation>[];
 
     if (cachedJobs) {
       this.logger.debug(`Cache hit (BullMQ Redis) for user ${userId}`);
-      allJobs = cachedJobs;
+      jobs = cachedJobs;
     } else {
       this.logger.debug(`Cache miss – fetching from API for user ${userId}`);
+      const appliedCount = await this.applicationRepository.count({
+        where: { candidate: { id: userId } },
+      });
 
       try {
         const response = await firstValueFrom(
           this.httpService
-            .get<{ data: Partial<JobRecomendation>[] }>(this.externalUrl)
+            .get<{
+              data: Partial<JobRecomendation>[];
+            }>(`${this.externalUrl}?page=${appliedCount + 1}`)
             .pipe(
               timeout(this.requestTimeoutMs),
               catchError((error: any) => {
@@ -68,24 +71,19 @@ export class JobRecomendationService {
             ),
         );
 
-        allJobs = response.data?.data ?? [];
+        jobs = response.data?.data ?? [];
 
-        await this.redisCache.set(cacheKey, allJobs, this.cacheTTL);
+        await this.redisCache.set(cacheKey, jobs, this.cacheTTL);
       } catch (error) {
         if (cachedJobs) {
           this.logger.warn('API failed – serving stale cached jobs');
-          allJobs = cachedJobs;
+          jobs = cachedJobs;
         } else {
           throw error;
         }
       }
     }
 
-    const appliedCount = await this.applicationRepository.count({
-      where: { candidate: { id: userId } },
-    });
-
-    const skipped = allJobs.slice(appliedCount);
-    return skipped.slice(0, limit);
+    return jobs;
   }
 }
