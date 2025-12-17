@@ -18,7 +18,7 @@ Customize if needed
 
 ### 3. Start Containers
 ```bash
-  docker compose up -d
+  docker compose up -d --build
 ```
 Wait all containers ready
 
