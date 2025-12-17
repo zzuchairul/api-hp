@@ -1,5 +1,6 @@
 // src/modules/companies/companies.service.ts
 import {
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -16,6 +17,14 @@ import { UpdateCompanyDto } from './dto/update-company.dto';
 export class CompaniesService {
   constructor(private companiesRepository: CompaniesRepository) {}
   async create(dto: CreateCompanyDto, userId: string) {
+    const isExist = await this.companiesRepository.findOne({
+      where: { creatorId: userId },
+    });
+
+    if (isExist) {
+      throw new ConflictException('You already have companies');
+    }
+
     const company = this.companiesRepository.createCompany({
       ...dto,
       creatorId: userId,
